@@ -1,0 +1,7 @@
+{
+    "name": "LSTech Balance",
+    "content_in_root": false,
+    "render_readme": true,
+    "country":"CN",
+    "homeassistant": "2025.6.1"
+}

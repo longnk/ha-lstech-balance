@@ -1,0 +1,77 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "添加帐号",
+                "description": "选择验证方式",
+                "data": {
+                    "action": "方式"
+                }
+            },
+            "login": {
+                "description": "配置帐号",
+                "data": {
+                    "account": "手机号或邮箱",
+                    "password": "密码",
+                    "scan_interval": "刷新间隔(秒)"
+                }
+            },
+            "quickLogin": {
+                "description": "快速登录",
+                "data": {
+                    "account": "手机号码"
+                }
+            },
+            "quickLogin2": {
+                "description": "校验验证码",
+                "data": {
+                    "verification_code": "验证码",
+                    "scan_interval": "刷新间隔(秒)"
+                }
+            },
+            "reauth_login": {
+                "description": "重新登录",
+                "data": {
+                    "account": "手机号或邮箱",
+                    "password": "密码",
+                    "scan_interval": "刷新间隔(秒)"
+                }
+            },
+            "reauth_quickLogin": {
+                "description": "重新登录",
+                "data": {
+                    "account": "手机号"
+                }
+            },
+            "reauth_quickLogin2": {
+                "description": "校验验证码",
+                "data": {
+                    "verification_code": "验证码",
+                    "scan_interval": "刷新间隔(秒)"
+                }
+            }
+        },
+        "error": {
+            "unknown_error": "未知错误",
+            "login_failed": "登录失败"
+        },
+        "abort": {
+            "account_exists": "帐号已存在",
+            "invalid_context": "无效上下文",
+            "entry_not_found": "未找到条目",
+            "invalid_auth_type": "无效的认证方式",
+            "already_configured": "重复的条目",
+            "reauth_successful": "重新验证完成"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "description": "修改配置",
+                "data": {
+                    "scan_interval": "刷新间隔(秒)"
+                }
+            }
+        }
+    }
+}

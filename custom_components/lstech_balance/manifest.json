@@ -1,0 +1,12 @@
+{
+  "domain": "lstech_balance",
+  "name": "派健康体脂秤",
+  "version": "0.0.1",
+  "documentation": "https://github.com/longnk/lstech_balance",
+  "issue_tracker": "https://github.com/longnk/lstech_balance/issues",
+  "dependencies": [],
+  "codeowners": ["@longnk"],
+  "requirements": [],
+  "iot_class": "cloud_polling",
+  "config_flow": true
+}
