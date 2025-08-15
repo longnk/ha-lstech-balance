@@ -23,10 +23,17 @@
                 }
             },
             "quickLogin2": {
-                "description": "校验验证码",
+                "description": "校验验证码(留空表示刷新)",
                 "data": {
                     "verification_code": "验证码",
                     "scan_interval": "刷新间隔(秒)"
+                }
+            },
+            "reauth_type": {
+                "title": "重新登录",
+                "description": "选择验证方式",
+                "data": {
+                    "action": "方式"
                 }
             },
             "reauth_login": {
@@ -44,7 +51,7 @@
                 }
             },
             "reauth_quickLogin2": {
-                "description": "校验验证码",
+                "description": "校验验证码(留空表示刷新)",
                 "data": {
                     "verification_code": "验证码",
                     "scan_interval": "刷新间隔(秒)"

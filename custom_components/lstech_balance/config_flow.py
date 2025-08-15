@@ -47,12 +47,25 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="entry_not_found")
         self.auth_type = self.existing_entry.data[CONF_AUTHTYPE]
         self.account = self.existing_entry.data[CONF_ACCOUNT]
-        if self.auth_type == "login":
-            return await self.async_step_reauth_login()
-        elif self.auth_type == "quickLogin":
-            return await self.async_step_reauth_quickLogin()
-        return self.async_abort(reason="invalid_auth_type")
+        return await self.async_step_reauth_type()
 
+    async def async_step_reauth_type(self, user_input=None):
+        if user_input:
+            if user_input["action"] == "login":
+                return await self.async_step_reauth_login()
+            elif user_input["action"] == "quickLogin":
+                return await self.async_step_reauth_quickLogin()
+            else:
+                return self.async_abort(reason="invalid_auth_type")
+
+        actions = {"login": "password(密码登录)", "quickLogin": "verification code(验证码登录)"}
+        return self.async_show_form(
+            step_id="reauth_type",
+            data_schema=vol.Schema(
+                {vol.Required("action", default=self.auth_type): vol.In(actions)}
+            ),
+            last_step=False
+        )
 
     async def async_step_reauth_login(self, user_input=None):
         errors = {}
@@ -129,46 +142,54 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth_quickLogin2(self, user_input=None):
         errors = {}
+        
         if user_input is not None:
-            self.verification_code = user_input[CONF_VERIFICATION_CODE]
-            options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL]}
-            # Attempt login
-            result = await self.hass.async_add_executor_job(
-                self.api.quickLogin, self.account, self.verification_code
-            )
-            
-            if result.get("code") == "0":                
-                account_data = {
-                    CONF_ACCOUNT: self.account,
-                    CONF_NICKNAME: self.api.nickname,
-                    "uid": self.api.uid,
-                    "access_token": self.api.access_token,
-                    "refresh_token": self.api.refresh_token,
-                    "access_token_expire": self.api.access_token_expire,
-                    "refresh_token_expire": self.api.refresh_token_expire,
-                    "member_id": self.api.member_id,
-                    "last_token_refresh": self.api.last_token_refresh,
-                    "last_login_time": self.api.last_login_time
-                }
-                
-                await self.hass.services.async_call(
-                    "persistent_notification",
-                    "dismiss",
-                    {"notification_id": f"{DOMAIN}_reauth_notification_{self.account}"}
+            self.verification_code = user_input.get(CONF_VERIFICATION_CODE)
+            if not self.verification_code or self.verification_code.strip() == "":
+                result = await self.hass.async_add_executor_job(
+                    self.api.send_verification_code, self.account
+                )
+                if result.get("code") != "0":
+                    errors["base"] = result.get("msg", "unknown_error")
+            else:
+                options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL]}
+                # Attempt login
+                result = await self.hass.async_add_executor_job(
+                    self.api.quickLogin, self.account, self.verification_code
                 )
                 
-                return self.async_update_reload_and_abort(
-                    self.existing_entry,
-                    data_updates=account_data,
-                    options=options
-                )
-            
-            errors["base"] = result.get("msg", "login_failed")
+                if result.get("code") == "0":                
+                    account_data = {
+                        CONF_ACCOUNT: self.account,
+                        CONF_NICKNAME: self.api.nickname,
+                        "uid": self.api.uid,
+                        "access_token": self.api.access_token,
+                        "refresh_token": self.api.refresh_token,
+                        "access_token_expire": self.api.access_token_expire,
+                        "refresh_token_expire": self.api.refresh_token_expire,
+                        "member_id": self.api.member_id,
+                        "last_token_refresh": self.api.last_token_refresh,
+                        "last_login_time": self.api.last_login_time
+                    }
+                    
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "dismiss",
+                        {"notification_id": f"{DOMAIN}_reauth_notification_{self.account}"}
+                    )
+                    
+                    return self.async_update_reload_and_abort(
+                        self.existing_entry,
+                        data_updates=account_data,
+                        options=options
+                    )
+                
+                errors["base"] = result.get("msg", "login_failed")
         
         return self.async_show_form(
             step_id="reauth_quickLogin2",
             data_schema=vol.Schema({
-                vol.Required(CONF_VERIFICATION_CODE): str,
+                vol.Optional(CONF_VERIFICATION_CODE): str,
                 vol.Optional(
                     CONF_SCAN_INTERVAL,
                     default=self.existing_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -192,6 +213,7 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {vol.Required("action", default="login"): vol.In(actions)}
             ),
+            last_step=False
         )
         
 
@@ -286,46 +308,53 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         
         if user_input is not None:
-            self.verification_code = user_input[CONF_VERIFICATION_CODE]
-            options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL]}
-            # Attempt login
-            result = await self.hass.async_add_executor_job(
-                self.api.quickLogin, self.account, self.verification_code
-            )
-            
-            if result.get("code") == "0":
-                # Check if UID already exists
-                for entry in self._async_current_entries():
-                    if entry.data.get("uid") == self.api.uid:
-                        return self.async_abort(reason="account_exists")
-                
-                # Create account data
-                account_data = {
-                    CONF_AUTHTYPE: "quickLogin",
-                    CONF_ACCOUNT: self.account,
-                    CONF_NICKNAME: self.api.nickname,
-                    "uid": self.api.uid,
-                    "access_token": self.api.access_token,
-                    "refresh_token": self.api.refresh_token,
-                    "access_token_expire": self.api.access_token_expire,
-                    "refresh_token_expire": self.api.refresh_token_expire,
-                    "member_id": self.api.member_id,
-                    "last_token_refresh": self.api.last_token_refresh,
-                    "last_login_time": self.api.last_login_time
-                }
-                
-                return self.async_create_entry(
-                    title=self.api.nickname,
-                    data=account_data,
-                    options=options
+            self.verification_code = user_input.get(CONF_VERIFICATION_CODE)
+            if not self.verification_code or self.verification_code.strip() == "":
+                result = await self.hass.async_add_executor_job(
+                    self.api.send_verification_code, self.account
                 )
-            
-            errors["base"] = result.get("msg", "login_failed")
+                if result.get("code") != "0":
+                    errors["base"] = result.get("msg", "unknown_error")
+            else:
+                options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL]}
+                # Attempt login
+                result = await self.hass.async_add_executor_job(
+                    self.api.quickLogin, self.account, self.verification_code
+                )
+                
+                if result.get("code") == "0":
+                    # Check if UID already exists
+                    for entry in self._async_current_entries():
+                        if entry.data.get("uid") == self.api.uid:
+                            return self.async_abort(reason="account_exists")
+                    
+                    # Create account data
+                    account_data = {
+                        CONF_AUTHTYPE: "quickLogin",
+                        CONF_ACCOUNT: self.account,
+                        CONF_NICKNAME: self.api.nickname,
+                        "uid": self.api.uid,
+                        "access_token": self.api.access_token,
+                        "refresh_token": self.api.refresh_token,
+                        "access_token_expire": self.api.access_token_expire,
+                        "refresh_token_expire": self.api.refresh_token_expire,
+                        "member_id": self.api.member_id,
+                        "last_token_refresh": self.api.last_token_refresh,
+                        "last_login_time": self.api.last_login_time
+                    }
+                    
+                    return self.async_create_entry(
+                        title=self.api.nickname,
+                        data=account_data,
+                        options=options
+                    )
+                
+                errors["base"] = result.get("msg", "login_failed")
         
         return self.async_show_form(
             step_id="quickLogin2",
             data_schema=vol.Schema({
-                vol.Required(CONF_VERIFICATION_CODE): str,
+                vol.Optional(CONF_VERIFICATION_CODE): str,
                 vol.Optional(
                     CONF_SCAN_INTERVAL,
                     default=DEFAULT_SCAN_INTERVAL
