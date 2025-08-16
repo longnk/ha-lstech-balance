@@ -13,7 +13,8 @@
                 "data": {
                     "account": "手机号或邮箱",
                     "password": "密码",
-                    "scan_interval": "刷新间隔(秒)"
+                    "scan_interval": "刷新间隔(秒)",
+                    "auto_own_data": "自动认领数据"
                 }
             },
             "quickLogin": {
@@ -26,7 +27,8 @@
                 "description": "校验验证码(留空表示刷新)",
                 "data": {
                     "verification_code": "验证码",
-                    "scan_interval": "刷新间隔(秒)"
+                    "scan_interval": "刷新间隔(秒)",
+                    "auto_own_data": "自动认领数据"
                 }
             },
             "reauth_type": {
@@ -41,7 +43,8 @@
                 "data": {
                     "account": "手机号或邮箱",
                     "password": "密码",
-                    "scan_interval": "刷新间隔(秒)"
+                    "scan_interval": "刷新间隔(秒)",
+                    "auto_own_data": "自动认领数据"
                 }
             },
             "reauth_quickLogin": {
@@ -54,7 +57,8 @@
                 "description": "校验验证码(留空表示刷新)",
                 "data": {
                     "verification_code": "验证码",
-                    "scan_interval": "刷新间隔(秒)"
+                    "scan_interval": "刷新间隔(秒)",
+                    "auto_own_data": "自动认领数据"
                 }
             }
         },
@@ -76,7 +80,8 @@
             "init": {
                 "description": "修改配置",
                 "data": {
-                    "scan_interval": "刷新间隔(秒)"
+                    "scan_interval": "刷新间隔(秒)",
+                    "auto_own_data": "自动认领数据"
                 }
             }
         }

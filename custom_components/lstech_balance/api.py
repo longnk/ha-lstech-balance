@@ -262,14 +262,13 @@ class LSTechAPI:
                 token=self.access_token,
                 userId=str(self.uid)  # 确保user_id是字符串
             )
+            
             if response.get("code") == "0":
                 if response.get("data"):
                     self.last_updated = time.time()
                     # 返回最新的体重数据（列表中的第一条）
                     return response["data"][0] if response["data"] else None
                 else:
-                    self.error_state = "No Data"
-                    self.error_time = datetime.now().isoformat()
                     return None
             
             # 处理API返回的错误
@@ -288,3 +287,145 @@ class LSTechAPI:
             self.error_state = f"Data fetch error: {str(err)}"
             self.error_time = datetime.now().isoformat()
             raise  # 重新抛出异常让coordinator处理
+            
+    def own_data(self, rawDataId):
+        try:
+            # 重置临时错误状态
+            self.error_state = None
+            self.auth_error = False
+            
+            # 检查是否需要刷新token
+            if not self.refresh_access_token():
+                # 刷新失败，抛出异常让coordinator处理
+                raise Exception("Token refresh failed")
+            
+            data = {
+                "memberId": str(self.member_id),
+                "rawDataId": str(rawDataId)
+            }
+            response = self._request(
+                "POST", 
+                f"{API_DOMAIN}/balance/claim/data/own", 
+                data=data, 
+                token=self.access_token,
+                userId=str(self.uid)  # 确保user_id是字符串
+            )
+            if response.get("code") == "0":
+                return True
+            
+            # 处理API返回的错误
+            error_msg = response.get("msg", "Unknown error")
+            self.error_state = f"API error: {error_msg}"
+            self.error_time = datetime.now().isoformat()
+            
+            # token失效
+            if response.get("code") in ["2000"]:
+                self.refresh_access_token(True)
+            
+            return False
+        
+        except Exception as err:
+            # 保存错误信息
+            self.error_state = f"Data fetch error: {str(err)}"
+            self.error_time = datetime.now().isoformat()
+            raise  # 重新抛出异常让coordinator处理
+            
+    def get_history(self):
+        try:
+            # 重置临时错误状态
+            self.error_state = None
+            self.auth_error = False
+            
+            # 检查是否需要刷新token
+            if not self.refresh_access_token():
+                # 刷新失败，抛出异常让coordinator处理
+                raise Exception("Token refresh failed")
+            
+            data = {
+                "currentLatestTimestamp": -1,
+                "memberId": self.member_id
+            }
+            response = self._request(
+                "POST", 
+                f"{API_DOMAIN}/balance/history/data/get", 
+                data=data, 
+                token=self.access_token,
+                userId=str(self.uid)  # 确保user_id是字符串
+            )
+            if response.get("code") == "0":
+                if response.get("data") and response.get("data").get("historyDataBeanList"):
+                    self.last_updated = time.time()
+                    return response["data"]["historyDataBeanList"][0]
+                else:
+                    return None
+            
+            # 处理API返回的错误
+            error_msg = response.get("msg", "Unknown error")
+            self.error_state = f"API error: {error_msg}"
+            self.error_time = datetime.now().isoformat()
+            
+            # token失效
+            if response.get("code") in ["2000"]:
+                self.refresh_access_token(True)
+            
+            return None
+        
+        except Exception as err:
+            # 保存错误信息
+            self.error_state = f"Data fetch error: {str(err)}"
+            self.error_time = datetime.now().isoformat()
+            raise  # 重新抛出异常让coordinator处理
+            
+            
+    def get_detail(self, measureId):
+        try:            
+            headers = {
+                'appId': str(self.appId),
+                'sec-ch-ua-platform': '"Android"',
+                'timestamp': str(int(time.time() * 1000)),
+                'timeZone': 'Asia/Shanghai',
+                'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Android WebView";v="138"',
+                'sec-ch-ua-mobile': '?1',
+                'appVersion': '3.0.1406',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/138.0.7204.181 Mobile Safari/537.36lsTech',
+                'userId': str(self.uid),
+                'LAISIH5': 'LAISIH5',
+                'version': 'v1',
+                'platform': 'android',
+                'Accept': '*/*',
+                'X-Requested-With': 'com.lstech.rehealth',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Dest': 'empty',
+                'Referer': f"{API_DOMAIN}/h5/h5V3/balance/bodydetail.html?measureId={measureId}&memberId={self.member_id}&userId={self.uid}&deviceType=balance",
+                'Accept-Encoding': 'gzip, deflate, br, zstd',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+            }
+            url = f"{API_DOMAIN}/balance/share/h5/data/share?memberId={self.member_id}&measureId={measureId}&userId={self.uid}"
+            res = requests.get(url, headers=headers, timeout=10)
+
+            try:
+                response = res.json()
+                if response.get("code") == "0":
+                    if response.get("data"):
+                        self.last_updated = time.time()
+                        return response["data"]
+                    else:
+                        return None
+
+                error_msg = response.get("msg", "Unknown error")
+                self.error_state = f"API error: {error_msg}"
+                self.error_time = datetime.now().isoformat() 
+                return None
+            except json.JSONDecodeError:
+                self.error_state = "Invalid JSON response"
+                self.error_time = datetime.now().isoformat()
+                return {"code": "-1", "msg": "Invalid JSON response"}
+        except requests.exceptions.RequestException as err:
+            self.error_state = f"Network error: {str(err)}"
+            self.error_time = datetime.now().isoformat()
+            return {"code": "-1", "msg": f"Network error: {str(err)}"}
+        except Exception as err:
+            self.error_state = f"Unexpected error: {str(err)}"
+            self.error_time = datetime.now().isoformat()
+            return {"code": "-1", "msg": f"Unexpected error: {str(err)}"}
