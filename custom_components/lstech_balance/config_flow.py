@@ -79,6 +79,7 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             if result.get("code") == "0":                
                 account_data = {
+                    CONF_AUTHTYPE: "login",
                     CONF_ACCOUNT: self.account,
                     CONF_NICKNAME: self.api.nickname,
                     "uid": self.api.uid,
@@ -160,6 +161,7 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 if result.get("code") == "0":                
                     account_data = {
+                        CONF_AUTHTYPE: "quickLogin",
                         CONF_ACCOUNT: self.account,
                         CONF_NICKNAME: self.api.nickname,
                         "uid": self.api.uid,

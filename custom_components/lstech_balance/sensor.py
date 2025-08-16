@@ -1,14 +1,14 @@
 """Sensor platform for LSTech Balance integration."""
 from __future__ import annotations
 import logging
-import tzlocal
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .const import DOMAIN, ATTRIBUTION, CONF_ACCOUNT, CONF_NICKNAME, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
@@ -55,17 +55,17 @@ async def async_setup_entry(
         """Fetch data from API endpoint."""
         try:
             o_last_token_refresh = api.last_token_refresh
-            o_last_login_time = api.last_login_time
+            o_access_token = api.access_token
             data = await hass.async_add_executor_job(api.get_weight_data)
-            if api.last_token_refresh != o_last_token_refresh or api.last_login_time != o_last_login_time:
+            if api.last_token_refresh != o_last_token_refresh or api.access_token != o_access_token:
                 updated_data = {**entry.data}
                 updated_data["last_token_refresh"] = api.last_token_refresh
-                updated_data["last_login_time"] = api.last_login_time
+                updated_data["access_token"] = api.access_token
                 hass.config_entries.async_update_entry(entry, data=updated_data)
             if data and 'timestamp' in data:
-                ts = data.get("timestamp")
-                data['iso_timestamp'] = datetime.utcfromtimestamp(ts/1000).isoformat() + "Z" if ts else None
-                #data['iso_timestamp'] = datetime.fromtimestamp(ts/1000, tzlocal.get_localzone()) if ts else None
+                ts = data.get("timestamp")/1000
+                data["timestamp"] = ts
+                data["iso_timestamp"] = datetime.utcfromtimestamp(ts).isoformat() + "Z" if ts else None
             return data
         except ConfigEntryAuthFailed as err:
             persistent_notification.async_create(
@@ -96,7 +96,7 @@ async def async_setup_entry(
         LSTechWeightSensor(coordinator, entry, api)
     ], False)
 
-class LSTechWeightSensor(SensorEntity):
+class LSTechWeightSensor(SensorEntity, RestoreEntity):
     """Representation of a LSTech Weight sensor."""
     
     _attr_attribution = ATTRIBUTION
@@ -117,30 +117,36 @@ class LSTechWeightSensor(SensorEntity):
             "manufacturer": "LSTech",
             "model": "Smart Scale"
         }
+        # 本地存储状态和属性
+        self._attr_native_value = None
+        self._attr_extra_state_attributes = {}
     
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        # 检查coordinator数据是否有效
-        if self.coordinator.data and "weight" in self.coordinator.data:
-            return self.coordinator.data["weight"]
-        return None
-    
-    @property
-    def extra_state_attributes(self):
-        """Return additional sensor attributes."""
-        attrs = {}
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         if self.coordinator.data:
-            attrs["timestamp"] = self.coordinator.data.get("iso_timestamp")
-            attrs["raw_data_id"] = self.coordinator.data.get("rawDataId")
-        
-        # 添加API错误状态（如果有）
-        if self.api.error_state:
-            attrs["error"] = self.api.error_state
-            attrs["error_time"] = self.api.error_time
+            if 'timestamp' in self._attr_extra_state_attributes and 'timestamp' in self.coordinator.data:
+                old_ts = datetime.strptime(self._attr_extra_state_attributes.get('timestamp'), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+                if self.coordinator.data.get("timestamp") < old_ts:
+                    return
             
-        return attrs
-    
+            if "weight" in self.coordinator.data:
+                self._attr_native_value = self.coordinator.data["weight"]
+            
+            attributes = {}
+            if "iso_timestamp" in self.coordinator.data:
+                attributes["timestamp"] = self.coordinator.data["iso_timestamp"]
+            if "rawDataId" in self.coordinator.data:
+                attributes["raw_data_id"] = self.coordinator.data["rawDataId"]
+            
+            if self.api.error_state:
+                attributes["error"] = self.api.error_state
+                attributes["error_time"] = self.api.error_time
+            
+            self._attr_extra_state_attributes = attributes
+        # 触发状态写入
+        self.async_write_ha_state()
+        
     @property
     def available(self):
         """Return True if entity is available."""
@@ -149,11 +155,22 @@ class LSTechWeightSensor(SensorEntity):
     
     async def async_added_to_hass(self):
         """When entity is added to hass."""
+        await super().async_added_to_hass()
+        if (last_state := await self.async_get_last_state()) is not None:
+            self._attr_native_value = last_state.state
+            if last_state.attributes:
+                self._attr_extra_state_attributes = dict(last_state.attributes)
+                for attr in ["attribution", "unit_of_measurement", "friendly_name", "icon"]:
+                    self._attr_extra_state_attributes.pop(attr, None)
+        # 添加 Coordinator 监听器
         self.async_on_remove(
             self.coordinator.async_add_listener(
-                self.async_write_ha_state
+                self._handle_coordinator_update
             )
         )
+        # 如果 Coordinator 已有数据（首次刷新已完成），立即处理
+        if self.coordinator.data is not None:
+            self._handle_coordinator_update()
     
     async def async_update(self):
         """Update the entity."""
