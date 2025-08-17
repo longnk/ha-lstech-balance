@@ -85,5 +85,20 @@
                 }
             }
         }
+    },
+    "device": {
+        "smart_scale": {
+            "name": "{owner}的体脂秤"
+        }
+    },
+    "entity": {
+        "sensor": {
+            "weight": {
+                "name": "体重"
+            },
+            "detail": {
+                "name": "数据详情"
+            }
+        }
     }
 }

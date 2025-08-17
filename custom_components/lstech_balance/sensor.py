@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta, datetime, timezone
 from functools import partial
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, DOMAIN as ENTITY_DOMAIN
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -151,11 +151,16 @@ class LSTechWeightSensor(SensorEntity, RestoreEntity):
         self.coordinator = coordinator
         self.entry = entry
         self.api = api
-        self._attr_name = f"{entry.data[CONF_NICKNAME]}的体脂秤 Weight"
+        self._attr_has_entity_name = True
+        #self._attr_name = "weight"
+        self._attr_translation_key = "weight"
+        self.entity_id = f'{ENTITY_DOMAIN}.{DOMAIN}_{entry.data["uid"]}_weight'
         self._attr_unique_id = f"{entry.entry_id}_weight"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": f"{entry.data[CONF_NICKNAME]}的体脂秤",
+            "name": None,
+            "translation_key": "smart_scale",
+            "translation_placeholders": {"owner": entry.data[CONF_NICKNAME]},
             "manufacturer": "LSTech",
             "model": "Smart Scale"
         }
@@ -240,11 +245,16 @@ class LSTechDetailSensor(SensorEntity):
         self.coordinator_data = coordinator_data
         self.entry = entry
         self.api = api
-        self._attr_name = f"{entry.data[CONF_NICKNAME]}的体脂秤 Detail"
+        self._attr_has_entity_name = True
+        #self._attr_name = "detail"
+        self._attr_translation_key = "detail"
+        self.entity_id = f'{ENTITY_DOMAIN}.{DOMAIN}_{entry.data["uid"]}_detail'
         self._attr_unique_id = f"{entry.entry_id}_detail"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": f"{entry.data[CONF_NICKNAME]}的体脂秤",
+            "name": None,
+            "translation_key": "smart_scale",
+            "translation_placeholders": {"owner": entry.data[CONF_NICKNAME]},
             "manufacturer": "LSTech",
             "model": "Smart Scale"
         }
@@ -276,3 +286,6 @@ class LSTechDetailSensor(SensorEntity):
                 self.async_write_ha_state
             )
         )
+    
+    async def async_update(self):
+        await self.coordinator.async_request_refresh()
