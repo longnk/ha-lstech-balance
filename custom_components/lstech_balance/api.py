@@ -288,7 +288,7 @@ class LSTechAPI:
             self.error_time = datetime.now().isoformat()
             raise  # 重新抛出异常让coordinator处理
             
-    def own_data(self, rawDataId):
+    def own_data(self, rawDataId, MemberId=None):
         try:
             # 重置临时错误状态
             self.error_state = None
@@ -300,7 +300,7 @@ class LSTechAPI:
                 raise Exception("Token refresh failed")
             
             data = {
-                "memberId": str(self.member_id),
+                "memberId": str(MemberId) if MemberId else str(self.member_id),
                 "rawDataId": str(rawDataId)
             }
             response = self._request(

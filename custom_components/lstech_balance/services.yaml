@@ -1,0 +1,19 @@
+own_data:
+  description: 认领数据
+  fields:
+    entity_id:
+      description: 选择一个使用人的数据详情
+      required: true
+      selector:
+        entity:
+          integration: lstech_balance
+          domain: sensor
+    raw_data_id:
+      description: 数据ID
+      required: true
+      selector:
+        number:
+    member_id:
+      description: 认领数据的成员ID(默认为选择的使用人)
+      selector:
+        number:

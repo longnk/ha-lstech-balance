@@ -1,4 +1,6 @@
 """Constants for lstech_balance integration."""
+from homeassistant.const import ATTR_ENTITY_ID
+
 DOMAIN = "lstech_balance"
 NAME = "LSTech Balance"
 PLATFORMS = ["sensor"]

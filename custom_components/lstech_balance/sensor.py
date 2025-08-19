@@ -11,15 +11,25 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.exceptions import ConfigEntryAuthFailed
-
+from . import MyEntries
 from .const import DOMAIN, CONF_ACCOUNT, CONF_NICKNAME, CONF_SCAN_INTERVAL, CONF_AUTO_OWN_DATA, DEFAULT_SCAN_INTERVAL
 from .api import LSTechAPI
 
 _LOGGER = logging.getLogger(__name__)
 
+
+async def goto_reauth(hass: HomeAssistant, entry: ConfigEntry):
+        persistent_notification.async_create(
+            hass=hass,
+            message=f"帐号 {entry.data[CONF_ACCOUNT]} 的登录状态已失效,请重新登录\r\n[点击这里快速跳转](/config/integrations/integration/{DOMAIN})",
+            title=f"需要重新验证",
+            notification_id=f"{DOMAIN}_reauth_notification_{entry.data[CONF_ACCOUNT]}"
+        )
+        hass.add_job(entry.async_start_reauth, hass)
+
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     new_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    coordinator: CustomCoordinator = hass.data[DOMAIN][entry.entry_id]['weight']
+    coordinator: CustomCoordinator = hass.data[DOMAIN][entry.entry_id]['coordinator']['weight']
     coordinator.set_update_interval(new_interval)
 
 class CustomCoordinator(DataUpdateCoordinator):
@@ -35,16 +45,10 @@ async def update_step2(hass: HomeAssistant, entry: ConfigEntry, api, rawDataId=N
     try:
         if rawDataId and entry.options.get(CONF_AUTO_OWN_DATA, False):
             await hass.async_add_executor_job(api.own_data, rawDataId)
-        coordinator_detail: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]['detail']
+        coordinator_detail: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]['coordinator']['detail']
         await coordinator_detail.async_request_refresh()
     except ConfigEntryAuthFailed as err:
-        persistent_notification.async_create(
-            hass=hass,
-            message=f"帐号 {entry.data[CONF_ACCOUNT]} 的登录状态已失效,请重新登录\r\n[点击这里快速跳转](/config/integrations/integration/{DOMAIN})",
-            title=f"需要重新验证",
-            notification_id=f"{DOMAIN}_reauth_notification_{entry.data[CONF_ACCOUNT]}"
-        )
-        hass.add_job(entry.async_start_reauth, hass)
+        goto_reauth(hass, entry)
         raise
     except Exception as err:
         # 其他错误抛出UpdateFailed
@@ -80,13 +84,13 @@ async def async_setup_entry(
                 data = await hass.async_add_executor_job(api.get_history)
                 _LOGGER.debug(f"get_history {entry.data.get(CONF_NICKNAME)} {data}")
                 if data and 'createTime' in data:
-                    #ts = data.get("createTime")/1000
-                    #data["timestamp"] = ts
-                    #data["iso_timestamp"] = datetime.utcfromtimestamp(ts).isoformat() + "Z" if ts else None
                     measureId = data.get("measureId")
                     data = await hass.async_add_executor_job(api.get_detail, measureId)
+                    if data:
+                        order_data = {"memberId":api.member_id}
+                        order_data.update(data)
+                        data = order_data
                     _LOGGER.debug(f"get_detail {entry.data.get(CONF_NICKNAME)} {data}")
-                    #data.update(detail_data)
             else:
                 data = await hass.async_add_executor_job(api.get_weight_data)
                 _LOGGER.debug(f"get_weight_data {entry.data.get(CONF_NICKNAME)} {data}")
@@ -101,13 +105,7 @@ async def async_setup_entry(
                 hass.config_entries.async_update_entry(entry, data=updated_data)
             return data
         except ConfigEntryAuthFailed as err:
-            persistent_notification.async_create(
-                hass=hass,
-                message=f"帐号 {entry.data[CONF_ACCOUNT]} 的登录状态已失效,请重新登录\r\n[点击这里快速跳转](/config/integrations/integration/{DOMAIN})",
-                title=f"需要重新验证",
-                notification_id=f"{DOMAIN}_reauth_notification_{entry.data[CONF_ACCOUNT]}"
-            )
-            hass.add_job(entry.async_start_reauth, hass)
+            goto_reauth(hass, entry)
             raise
         except Exception as err:
             # 其他错误抛出UpdateFailed
@@ -128,8 +126,7 @@ async def async_setup_entry(
         update_interval=None,
     )
     
-    
-    hass.data[DOMAIN][entry.entry_id] = {'weight':coordinator, 'detail':coordinator_detail}
+    hass.data[DOMAIN][entry.entry_id]['coordinator'] = {'weight':coordinator, 'detail':coordinator_detail}
     entry.async_on_unload(entry.add_update_listener(update_listener))
     
     async_add_entities([
@@ -281,11 +278,17 @@ class LSTechDetailSensor(SensorEntity):
         return self.coordinator_data.last_update_success and self.coordinator.last_update_success and not self.api.auth_error
     
     async def async_added_to_hass(self):
+        await super().async_added_to_hass()
         self.async_on_remove(
             self.coordinator.async_add_listener(
                 self.async_write_ha_state
             )
         )
+        MyEntries[self.entry.entry_id][self.entity_id] = self
+    
+    async def async_will_remove_from_hass(self):
+        await super().async_will_remove_from_hass()
+        MyEntries[self.entry.entry_id].pop(self.entity_id)
     
     async def async_update(self):
         await self.coordinator.async_request_refresh()
