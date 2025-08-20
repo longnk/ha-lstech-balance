@@ -1,0 +1,181 @@
+blueprint:
+  name: 派健康体脂秤-自动认领
+  domain: automation
+  input:
+    weight:
+      name: 数据来源
+      description: "未认领数据实体 lstech_balance_xxxxxx_weight" 
+      selector:
+        entity:
+          domain: sensor
+          integration: lstech_balance
+
+    users:
+      name: 使用者
+      description: "参与自动认领的数据详情实体" 
+      selector: 
+        entity:
+          domain: sensor
+          integration: lstech_balance
+          device_class: weight
+          multiple: true
+
+    max_diff:
+      name: 最大重量差
+      description: 允许认领的最大差值
+      default: 0.8
+      selector:
+        number:
+            min: 0.01
+            max: 50
+            mode: box 
+            unit_of_measurement: kg
+            
+    notify_action:
+      name: 认领结果通知
+      default:
+        - if:
+            - condition: template
+              value_template: "{{ response.code == \"0\" }}"
+          then:
+            - action: notify.persistent_notification
+              metadata: {}
+              data:
+                title: 派健康体脂秤
+                message: |
+                  为 {{ state_attr(member_entity, 'nickname') }} 认领数据ID为 {{ raw_data_id }} 的数据成功!
+                  当前体重描为: {{ state_attr(member_entity, 'weight') }}kg {{ state_attr(member_entity, 'weightDescription') }}
+                  bmi为: {{ state_attr(member_entity, 'bmi') }} {{ state_attr(member_entity, 'bmiDescription') }}
+          else:
+            - action: notify.persistent_notification
+              metadata: {}
+              data:
+                title: 派健康体脂秤
+                message: 认领数据失败:{{ response.msg }}
+      description: "通知操作"
+      selector:
+        action:
+
+    log_level:
+      name: 日志等级
+      description: |
+        可在 开发者工具-事件 中使用事件 lstech_balance_test 进行调试
+        数据格式为 {"weight":100, "raw_data_id":10086}
+      default: debug
+      selector:          
+        select:
+          options:
+            - debug
+            - info
+            - warning
+            - error
+
+variables:
+  weight_entity_id: !input weight
+  users_entities: !input users
+  max_diff: !input max_diff
+  member_entity: null
+  min_difference: 9999
+
+mode: single
+triggers:
+  - platform: state
+    entity_id: !input weight
+    attribute: timestamp
+    id: weight_update
+  - trigger: event
+    event_type: lstech_balance_test
+    id: debug_event
+
+condition:
+  - condition: template
+    value_template: "{{ ('from_state' not in trigger) or (trigger.from_state.state not in ['unavailable', 'unknown'] and trigger.to_state.state not in ['unavailable', 'unknown']) }}"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: weight_update
+        sequence:
+          - variables:
+              target_weight: "{{ states(weight_entity_id) | default(none) }}"
+              raw_data_id: "{{ state_attr(weight_entity_id, 'raw_data_id') | default(none) }}"
+          - if:
+              - condition: template
+                value_template: "{{ target_weight is none or raw_data_id is none  }}"
+            then:
+              - service: system_log.write
+                data:
+                  message: '数据错误'
+                  level: !input log_level
+              - stop: 没有找到参数
+                error: true
+                
+      - conditions:
+          - condition: trigger
+            id: debug_event
+        sequence:
+          - variables:
+              target_weight: "{{ trigger.event.data.weight | default(none) }}"
+              raw_data_id: "{{ trigger.event.data.raw_data_id | default(none)}}"
+          - if:
+              - condition: template
+                value_template: "{{ target_weight is none or raw_data_id is none  }}"
+            then:
+              - action: notify.persistent_notification
+                metadata: {}
+                data:
+                  message: |-
+                    请传入weight与raw_data_id
+                    例如: {"weight":100, "raw_data_id":10086}
+              - stop: 没有找到参数
+                error: true
+                  
+  - repeat:
+      for_each: "{{ users_entities }}"
+      sequence:
+        - service: system_log.write
+          data:
+            message: "正在检查传感器 {{ repeat.item }}"
+            level: !input log_level
+
+        - variables:
+            current_state: "{{ states(repeat.item) | float(default=0) }}"
+            
+        - variables:
+            difference: "{{ (current_state - target_weight) | abs | round(2) }}"
+            
+        - service: system_log.write
+          data:
+            message: "传感器 {{ repeat.item }} 的值: {{ current_state }}, 与目标差距: {{ difference }}"
+            level: !input log_level
+        
+        - choose:
+            - conditions: "{{ difference < min_difference }}"
+              sequence:
+                - variables:
+                    min_difference: "{{ difference }}"
+                    member_entity: "{{ repeat.item }}"
+                    
+  - if:
+      - condition: template
+        value_template: "{{ min_difference <= max_diff }}"
+    then:
+      - service: system_log.write
+        data:
+          message: '最接近目标重量 {{ target_weight }} 的传感器是 {{ member_entity }}, 差距为 {{ min_difference }} 数据ID为 {{ raw_data_id }}, 符合认领条件!'
+          level: !input log_level
+      - action: lstech_balance.own_data
+        metadata: {}
+        data:
+          entity_id: "{{ member_entity }}"
+          raw_data_id: "{{ raw_data_id }}"
+          update_immediately: true
+        response_variable: response
+      - sequence: !input notify_action
+    else:
+      - service: system_log.write
+        data:
+          message: '最接近目标重量 {{ target_weight }} 的传感器是 {{ member_entity }}, 差距为 {{ min_difference }}, 差距超出阈值,无法认领数据'
+          level: !input log_level
+          
