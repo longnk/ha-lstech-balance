@@ -18,6 +18,7 @@ from .const import (
     CONF_NICKNAME,
     CONF_SCAN_INTERVAL,
     CONF_AUTO_OWN_DATA,
+    CONF_AUTO_UPDATE_DETAIL,
     CONF_MULTI_USERS,
     DEFAULT_SCAN_INTERVAL
 )
@@ -81,7 +82,7 @@ async def async_setup_entry(
                     measureId = data.get("measureId")
                     data = await hass.async_add_executor_job(api.get_detail, measureId, memberId)
                     if data:
-                        order_data = {"memberId":str(api.member_id)}
+                        order_data = {"memberId":str(memberId) if memberId else str(api.member_id)}
                         order_data.update(data)
                         data = order_data
                     _LOGGER.debug(f"get_detail {entry.data.get(CONF_NICKNAME)} {data}")
@@ -215,7 +216,9 @@ class LSTechWeightSensor(SensorEntity, RestoreEntity):
                 
         if is_updated:
             self.async_write_ha_state()
-        self.hass.async_create_task(update_detail(self.hass, self.entry, self.api, rawDataId))
+        if not hasattr(self,'__update_detail') or self.entry.options.get(CONF_AUTO_OWN_DATA, False) or self.entry.options.get(CONF_AUTO_UPDATE_DETAIL, False):
+            self.__update_detail = True
+            self.hass.async_create_task(update_detail(self.hass, self.entry, self.api, rawDataId))
         
     @property
     def available(self):
@@ -285,9 +288,6 @@ class LSTechDetailSensor(SensorEntity):
             "model": "Smart Scale"
         }
     
-    def own_data(self, rawDataId, MemberId=None):
-        return self.api.own_data(rawDataId, self.member_id if MemberId is None else MemberId)
-    
     @property
     def state(self):
         if self.coordinator.data and "weight" in self.coordinator.data:
@@ -325,3 +325,10 @@ class LSTechDetailSensor(SensorEntity):
     
     async def async_update(self):
         await self.coordinator.async_request_refresh()
+    
+    def service_own_data(self, rawDataId, MemberId=None):
+        _LOGGER.debug(f"detail.own_data nickname:{self.nickname} member_id:{self.member_id} rawDataId:{rawDataId}")
+        return self.api.own_data(rawDataId, self.member_id if MemberId is None else MemberId)
+
+    async def service_async_update(self, _=None):
+        await self.async_update()

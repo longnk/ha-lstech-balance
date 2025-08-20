@@ -4,6 +4,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.core import ServiceCall, SupportsResponse
+from homeassistant.helpers.event import async_call_later
 from .const import DOMAIN, PLATFORMS, ATTR_ENTITY_ID
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,16 +50,16 @@ def setup_service_own_data(hass: HomeAssistant):
             for entity_id, entity in entry.items():
                 if entity_id != entity_ids:
                     continue
-                result = await hass.async_add_executor_job(entity.own_data, rawDataId, MemberId)
+                result = await hass.async_add_executor_job(entity.service_own_data, rawDataId, MemberId)
                 if result and update_immediately:
                     if MemberId is None:
-                        await entity.async_update()
+                        async_call_later(hass, 1, entity.service_async_update)
                     else:
                         is_updated = False
                         for _entry in MyEntries.values():
                             for _entity in _entry.values():
                                 if _entity.member_id == MemberId:
-                                    await _entity.async_update()
+                                    async_call_later(hass, 1, _entity.service_async_update)
                                     is_updated = True
                                     break
                             if is_updated:

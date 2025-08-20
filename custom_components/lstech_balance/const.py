@@ -12,6 +12,7 @@ CONF_PASSWD = "password"
 CONF_VERIFICATION_CODE = "verification_code"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_AUTO_OWN_DATA = "auto_own_data"
+CONF_AUTO_UPDATE_DETAIL = "auto_update_detail"
 CONF_MULTI_USERS = "multi_users"
 DEFAULT_SCAN_INTERVAL = 60
 

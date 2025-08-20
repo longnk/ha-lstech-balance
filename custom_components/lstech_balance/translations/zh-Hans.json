@@ -15,6 +15,7 @@
                     "password": "密码",
                     "scan_interval": "刷新间隔(秒)",
                     "auto_own_data": "自动认领数据(默认使用者)",
+                    "auto_update_detail": "自动刷新详情(默认使用者)",
                     "multi_users": "启用多使用者"
                 }
             },
@@ -30,6 +31,7 @@
                     "verification_code": "验证码",
                     "scan_interval": "刷新间隔(秒)",
                     "auto_own_data": "自动认领数据(默认使用者)",
+                    "auto_update_detail": "自动刷新详情(默认使用者)",
                     "multi_users": "启用多使用者"
                 }
             },
@@ -47,6 +49,7 @@
                     "password": "密码",
                     "scan_interval": "刷新间隔(秒)",
                     "auto_own_data": "自动认领数据(默认使用者)",
+                    "auto_update_detail": "自动刷新详情(默认使用者)",
                     "multi_users": "启用多使用者"
                 }
             },
@@ -62,6 +65,7 @@
                     "verification_code": "验证码",
                     "scan_interval": "刷新间隔(秒)",
                     "auto_own_data": "自动认领数据(默认使用者)",
+                    "auto_update_detail": "自动刷新详情(默认使用者)",
                     "multi_users": "启用多使用者"
                 }
             }
@@ -86,6 +90,7 @@
                 "data": {
                    "scan_interval": "刷新间隔(秒)",
                    "auto_own_data": "自动认领数据(默认使用者)",
+                   "auto_update_detail": "自动刷新详情(默认使用者)",
                    "multi_users": "启用多使用者"
                 }
             }
