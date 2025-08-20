@@ -330,7 +330,7 @@ class LSTechAPI:
             self.error_time = datetime.now().isoformat()
             raise  # 重新抛出异常让coordinator处理
             
-    def get_history(self):
+    def get_history(self, MemberId=None):
         try:
             # 重置临时错误状态
             self.error_state = None
@@ -343,7 +343,7 @@ class LSTechAPI:
             
             data = {
                 "currentLatestTimestamp": -1,
-                "memberId": self.member_id
+                "memberId": int(MemberId) if MemberId else int(self.member_id)
             }
             response = self._request(
                 "POST", 
@@ -377,7 +377,8 @@ class LSTechAPI:
             raise  # 重新抛出异常让coordinator处理
             
             
-    def get_detail(self, measureId):
+    def get_detail(self, measureId, MemberId=None):
+        v_member_id = str(MemberId) if MemberId else str(self.member_id)
         try:            
             headers = {
                 'appId': str(self.appId),
@@ -397,11 +398,11 @@ class LSTechAPI:
                 'Sec-Fetch-Site': 'same-origin',
                 'Sec-Fetch-Mode': 'cors',
                 'Sec-Fetch-Dest': 'empty',
-                'Referer': f"{API_DOMAIN}/h5/h5V3/balance/bodydetail.html?measureId={measureId}&memberId={self.member_id}&userId={self.uid}&deviceType=balance",
+                'Referer': f"{API_DOMAIN}/h5/h5V3/balance/bodydetail.html?measureId={measureId}&memberId={v_member_id}&userId={self.uid}&deviceType=balance",
                 'Accept-Encoding': 'gzip, deflate, br, zstd',
                 'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
             }
-            url = f"{API_DOMAIN}/balance/share/h5/data/share?memberId={self.member_id}&measureId={measureId}&userId={self.uid}"
+            url = f"{API_DOMAIN}/balance/share/h5/data/share?memberId={v_member_id}&measureId={measureId}&userId={self.uid}"
             res = requests.get(url, headers=headers, timeout=10)
 
             try:
@@ -429,3 +430,49 @@ class LSTechAPI:
             self.error_state = f"Unexpected error: {str(err)}"
             self.error_time = datetime.now().isoformat()
             return {"code": "-1", "msg": f"Unexpected error: {str(err)}"}
+
+
+    def get_members(self):
+        try:
+            # 重置临时错误状态
+            self.error_state = None
+            self.auth_error = False
+            
+            # 检查是否需要刷新token
+            if not self.refresh_access_token():
+                # 刷新失败，抛出异常让coordinator处理
+                raise Exception("Token refresh failed")
+            
+            data = {
+                "uid": str(self.uid)
+            }
+            response = self._request(
+                "POST", 
+                f"{API_DOMAIN}/device/get/sub/account/bind/info", 
+                data=data, 
+                token=self.access_token,
+                userId=str(self.uid)  # 确保user_id是字符串
+            )
+            if response.get("code") == "0":
+                if response.get("data"):
+                    self.last_updated = time.time()
+                    return response["data"]
+                else:
+                    return None
+            
+            # 处理API返回的错误
+            error_msg = response.get("msg", "Unknown error")
+            self.error_state = f"API error: {error_msg}"
+            self.error_time = datetime.now().isoformat()
+            
+            # token失效
+            if response.get("code") in ["2000"]:
+                self.refresh_access_token(True)
+            
+            return None
+        
+        except Exception as err:
+            # 保存错误信息
+            self.error_state = f"Data fetch error: {str(err)}"
+            self.error_time = datetime.now().isoformat()
+            raise  # 重新抛出异常让coordinator处理

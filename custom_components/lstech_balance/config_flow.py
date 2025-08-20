@@ -14,6 +14,7 @@ from .const import (
     CONF_VERIFICATION_CODE,
     CONF_SCAN_INTERVAL,
     CONF_AUTO_OWN_DATA,
+    CONF_MULTI_USERS,
     DEFAULT_SCAN_INTERVAL
 )
 from homeassistant.helpers.selector import (
@@ -72,7 +73,11 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             self.password = user_input[CONF_PASSWD]
-            options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL], CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA]}
+            options = {
+                CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL],
+                CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA],
+                CONF_MULTI_USERS:user_input[CONF_MULTI_USERS]
+            }
             # Attempt login
             result = await self.hass.async_add_executor_job(
                 self.api.login, self.account, self.password
@@ -116,7 +121,8 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SCAN_INTERVAL,
                     default=self.existing_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
                 ): int,
-                vol.Optional(CONF_AUTO_OWN_DATA, default=self.existing_entry.options.get(CONF_AUTO_OWN_DATA, False)): bool
+                vol.Optional(CONF_AUTO_OWN_DATA, default=self.existing_entry.options.get(CONF_AUTO_OWN_DATA, False)): bool,
+                vol.Optional(CONF_MULTI_USERS, default=self.existing_entry.options.get(CONF_MULTI_USERS, False)): bool
             }),
             errors=errors
         )
@@ -155,7 +161,11 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if result.get("code") != "0":
                     errors["base"] = result.get("msg", "unknown_error")
             else:
-                options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL], CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA]}
+                options = {
+                    CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL],
+                    CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA],
+                    CONF_MULTI_USERS:user_input[CONF_MULTI_USERS]
+                }
                 # Attempt login
                 result = await self.hass.async_add_executor_job(
                     self.api.quickLogin, self.account, self.verification_code
@@ -198,7 +208,8 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SCAN_INTERVAL,
                     default=self.existing_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
                 ): int,
-                vol.Optional(CONF_AUTO_OWN_DATA, default=self.existing_entry.options.get(CONF_AUTO_OWN_DATA, False)): bool
+                vol.Optional(CONF_AUTO_OWN_DATA, default=self.existing_entry.options.get(CONF_AUTO_OWN_DATA, False)): bool,
+                vol.Optional(CONF_MULTI_USERS, default=self.existing_entry.options.get(CONF_MULTI_USERS, False)): bool
             }),
             errors=errors
         )
@@ -231,7 +242,11 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
             
             self.password = user_input[CONF_PASSWD]
-            options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL], CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA]}
+            options = {
+                CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL],
+                CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA],
+                CONF_MULTI_USERS:user_input[CONF_MULTI_USERS]
+            }
             # Attempt login
             result = await self.hass.async_add_executor_job(
                 self.api.login, self.account, self.password
@@ -275,7 +290,8 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SCAN_INTERVAL,
                     default=DEFAULT_SCAN_INTERVAL
                 ): int,
-                vol.Optional(CONF_AUTO_OWN_DATA, default=False): bool
+                vol.Optional(CONF_AUTO_OWN_DATA, default=False): bool,
+                vol.Optional(CONF_MULTI_USERS, default=False): bool
             }),
             errors=errors
         )
@@ -322,7 +338,11 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if result.get("code") != "0":
                     errors["base"] = result.get("msg", "unknown_error")
             else:
-                options = {CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL], CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA]}
+                options = {
+                    CONF_SCAN_INTERVAL:user_input[CONF_SCAN_INTERVAL],
+                    CONF_AUTO_OWN_DATA:user_input[CONF_AUTO_OWN_DATA],
+                    CONF_MULTI_USERS:user_input[CONF_MULTI_USERS]
+                }
                 # Attempt login
                 result = await self.hass.async_add_executor_job(
                     self.api.quickLogin, self.account, self.verification_code
@@ -365,7 +385,8 @@ class LSTechBalanceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_SCAN_INTERVAL,
                     default=DEFAULT_SCAN_INTERVAL
                 ): int,
-                vol.Optional(CONF_AUTO_OWN_DATA, default=False): bool
+                vol.Optional(CONF_AUTO_OWN_DATA, default=False): bool,
+                vol.Optional(CONF_MULTI_USERS, default=False): bool
             }),
             errors=errors
         )
@@ -397,8 +418,7 @@ class LSTechBalanceOptionsFlow(config_entries.OptionsFlow):
                         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                     )
                 ): int,
-                vol.Optional(CONF_AUTO_OWN_DATA, default=self.config_entry.options.get(
-                        CONF_AUTO_OWN_DATA, False
-                    )): bool
+                vol.Optional(CONF_AUTO_OWN_DATA, default=self.config_entry.options.get(CONF_AUTO_OWN_DATA, False)): bool,
+                vol.Optional(CONF_MULTI_USERS, default=self.config_entry.options.get(CONF_MULTI_USERS, False)): bool
             })
         )

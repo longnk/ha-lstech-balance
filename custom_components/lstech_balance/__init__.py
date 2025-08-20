@@ -22,6 +22,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     MyEntries.setdefault(entry.entry_id, {})
     # Forward to sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -32,20 +33,38 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
     
+async def async_reload_entry(hass: HomeAssistant, config_entry: ConfigEntry):
+    """Handle update."""
+    await hass.config_entries.async_reload(config_entry.entry_id)
+
 def setup_service_own_data(hass: HomeAssistant):
     async def service(call: ServiceCall):
         entity_ids = call.data.get(ATTR_ENTITY_ID)
         if not entity_ids:
-            return {"code": -1, "msg": "no entity id"}
+            return {"code": "-1", "msg": "no entity id"}
         rawDataId = call.data.get("raw_data_id")
         MemberId = call.data.get("member_id")
+        update_immediately = call.data.get("update_immediately", False)
         for entry in MyEntries.values():
             for entity_id, entity in entry.items():
-                if entity_id not in entity_ids:
+                if entity_id != entity_ids:
                     continue
-                result = await hass.async_add_executor_job(entity.api.own_data, rawDataId, MemberId)
-                return {"code": 0, "msg": "success"} if result else {"code": -1, "msg": entity.api.error_state}
-        return {"code": -1, "msg": "unknown error"}
+                result = await hass.async_add_executor_job(entity.own_data, rawDataId, MemberId)
+                if result and update_immediately:
+                    if MemberId is None:
+                        await entity.async_update()
+                    else:
+                        is_updated = False
+                        for _entry in MyEntries.values():
+                            for _entity in _entry.values():
+                                if _entity.member_id == MemberId:
+                                    await _entity.async_update()
+                                    is_updated = True
+                                    break
+                            if is_updated:
+                                break
+                return {"code": "0", "msg": "success"} if result else {"code": "-1", "msg": entity.api.error_state}
+        return {"code": "-1", "msg": "unknown error"}
     hass.services.async_register(
         DOMAIN, "own_data", service,
         supports_response=SupportsResponse.OPTIONAL,

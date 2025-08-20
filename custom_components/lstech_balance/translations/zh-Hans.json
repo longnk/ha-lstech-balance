@@ -14,7 +14,8 @@
                     "account": "手机号或邮箱",
                     "password": "密码",
                     "scan_interval": "刷新间隔(秒)",
-                    "auto_own_data": "自动认领数据"
+                    "auto_own_data": "自动认领数据(默认使用者)",
+                    "multi_users": "启用多使用者"
                 }
             },
             "quickLogin": {
@@ -28,7 +29,8 @@
                 "data": {
                     "verification_code": "验证码",
                     "scan_interval": "刷新间隔(秒)",
-                    "auto_own_data": "自动认领数据"
+                    "auto_own_data": "自动认领数据(默认使用者)",
+                    "multi_users": "启用多使用者"
                 }
             },
             "reauth_type": {
@@ -44,13 +46,14 @@
                     "account": "手机号或邮箱",
                     "password": "密码",
                     "scan_interval": "刷新间隔(秒)",
-                    "auto_own_data": "自动认领数据"
+                    "auto_own_data": "自动认领数据(默认使用者)",
+                    "multi_users": "启用多使用者"
                 }
             },
             "reauth_quickLogin": {
                 "description": "重新登录",
                 "data": {
-                    "account": "手机号"
+                    "account": "手机号码"
                 }
             },
             "reauth_quickLogin2": {
@@ -58,7 +61,8 @@
                 "data": {
                     "verification_code": "验证码",
                     "scan_interval": "刷新间隔(秒)",
-                    "auto_own_data": "自动认领数据"
+                    "auto_own_data": "自动认领数据(默认使用者)",
+                    "multi_users": "启用多使用者"
                 }
             }
         },
@@ -80,8 +84,9 @@
             "init": {
                 "description": "修改配置",
                 "data": {
-                    "scan_interval": "刷新间隔(秒)",
-                    "auto_own_data": "自动认领数据"
+                   "scan_interval": "刷新间隔(秒)",
+                   "auto_own_data": "自动认领数据(默认使用者)",
+                   "multi_users": "启用多使用者"
                 }
             }
         }
@@ -94,10 +99,10 @@
     "entity": {
         "sensor": {
             "weight": {
-                "name": "体重"
+                "name": "未认领数据"
             },
             "detail": {
-                "name": "数据详情"
+                "name": "{nickname}的数据详情"
             }
         }
     },
@@ -106,13 +111,16 @@
             "description": "认领数据",
             "fields": {
                 "entity_id": {
-                    "description": "选择一个使用人的数据详情"
+                    "description": "选择一个使用人"
                 },
                 "raw_data_id": {
                     "description": "数据ID"
                 },
                 "member_id": {
                     "description": "认领数据的成员ID(默认为选择的使用人)"
+                },
+                "update_immediately": {
+                    "description": "成功后立即刷新"
                 }
             }
         }

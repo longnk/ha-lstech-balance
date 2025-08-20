@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta, datetime, timezone
 from functools import partial
-from homeassistant.components.sensor import SensorEntity, DOMAIN as ENTITY_DOMAIN
+from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass, DOMAIN as ENTITY_DOMAIN
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -12,7 +12,15 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from . import MyEntries
-from .const import DOMAIN, CONF_ACCOUNT, CONF_NICKNAME, CONF_SCAN_INTERVAL, CONF_AUTO_OWN_DATA, DEFAULT_SCAN_INTERVAL
+from .const import (
+    DOMAIN,
+    CONF_ACCOUNT,
+    CONF_NICKNAME,
+    CONF_SCAN_INTERVAL,
+    CONF_AUTO_OWN_DATA,
+    CONF_MULTI_USERS,
+    DEFAULT_SCAN_INTERVAL
+)
 from .api import LSTechAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,28 +35,14 @@ async def goto_reauth(hass: HomeAssistant, entry: ConfigEntry):
         )
         hass.add_job(entry.async_start_reauth, hass)
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    new_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    coordinator: CustomCoordinator = hass.data[DOMAIN][entry.entry_id]['coordinator']['weight']
-    coordinator.set_update_interval(new_interval)
-
-class CustomCoordinator(DataUpdateCoordinator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args,**kwargs)
-
-    def set_update_interval(self, new_interval) -> None:
-        self.update_interval = timedelta(seconds=new_interval) if new_interval>0 else None
-        # 取消当前定时器并立即启动新定时器
-        self._schedule_refresh()
-
-async def update_step2(hass: HomeAssistant, entry: ConfigEntry, api, rawDataId=None) -> None:
+async def update_detail(hass: HomeAssistant, entry: ConfigEntry, api, rawDataId=None) -> None:
     try:
         if rawDataId and entry.options.get(CONF_AUTO_OWN_DATA, False):
             await hass.async_add_executor_job(api.own_data, rawDataId)
         coordinator_detail: DataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]['coordinator']['detail']
         await coordinator_detail.async_request_refresh()
     except ConfigEntryAuthFailed as err:
-        goto_reauth(hass, entry)
+        await goto_reauth(hass, entry)
         raise
     except Exception as err:
         # 其他错误抛出UpdateFailed
@@ -75,22 +69,24 @@ async def async_setup_entry(
     
     scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     # 自定义更新方法，处理token刷新失败
-    async def async_update_data(step=None):
+    async def async_update_data(step=None, memberId=None):
         """Fetch data from API endpoint."""
         try:
             o_last_token_refresh = api.last_token_refresh
             o_access_token = api.access_token
             if step == 'detail':
-                data = await hass.async_add_executor_job(api.get_history)
+                data = await hass.async_add_executor_job(api.get_history, memberId)
                 _LOGGER.debug(f"get_history {entry.data.get(CONF_NICKNAME)} {data}")
                 if data and 'createTime' in data:
                     measureId = data.get("measureId")
-                    data = await hass.async_add_executor_job(api.get_detail, measureId)
+                    data = await hass.async_add_executor_job(api.get_detail, measureId, memberId)
                     if data:
-                        order_data = {"memberId":api.member_id}
+                        order_data = {"memberId":str(api.member_id)}
                         order_data.update(data)
                         data = order_data
                     _LOGGER.debug(f"get_detail {entry.data.get(CONF_NICKNAME)} {data}")
+                if data is None:
+                    data = {"memberId":str(memberId) if memberId else str(api.member_id)}
             else:
                 data = await hass.async_add_executor_job(api.get_weight_data)
                 _LOGGER.debug(f"get_weight_data {entry.data.get(CONF_NICKNAME)} {data}")
@@ -105,29 +101,28 @@ async def async_setup_entry(
                 hass.config_entries.async_update_entry(entry, data=updated_data)
             return data
         except ConfigEntryAuthFailed as err:
-            goto_reauth(hass, entry)
+            await goto_reauth(hass, entry)
             raise
         except Exception as err:
             # 其他错误抛出UpdateFailed
             raise UpdateFailed(f"Error communicating with API: {err}") from err
     
-    coordinator = CustomCoordinator(
+    coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name="lstech_balance",
         update_method=async_update_data,
-        update_interval=timedelta(seconds=scan_interval) if scan_interval>0 else None,
+        update_interval=timedelta(seconds=scan_interval) if scan_interval>0 else None
     )
     coordinator_detail = DataUpdateCoordinator(
         hass,
         _LOGGER,
         name="lstech_balance_detail",
         update_method=partial(async_update_data, "detail"),
-        update_interval=None,
+        update_interval=None
     )
     
     hass.data[DOMAIN][entry.entry_id]['coordinator'] = {'weight':coordinator, 'detail':coordinator_detail}
-    entry.async_on_unload(entry.add_update_listener(update_listener))
     
     async_add_entities([
         LSTechWeightSensor(coordinator, entry, api),
@@ -135,6 +130,29 @@ async def async_setup_entry(
     ], False)
     
     await coordinator.async_config_entry_first_refresh()
+    
+    if entry.options.get(CONF_MULTI_USERS):
+        async def add_members():
+            if (members := await hass.async_add_executor_job(api.get_members)) is not None:
+                member_entities = []
+                for member in members:
+                    if member.get("myself") == "1":
+                        continue
+                    #member_attr = {key: member[key] for key in ['memberId','nickname'] if key in member}
+                    member_coordinator = DataUpdateCoordinator(
+                        hass,
+                        _LOGGER,
+                        name="lstech_balance_detail",
+                        update_method=partial(async_update_data, "detail", member.get("memberId")),
+                        update_interval=None
+                    )
+                    member_entities.append(LSTechDetailSensor(
+                        member_coordinator,entry, api, coordinator, member
+                    ))
+                if member_entities:
+                    async_add_entities(member_entities, True)
+        hass.async_create_task(add_members())
+        
 
 class LSTechWeightSensor(SensorEntity, RestoreEntity):
     """Representation of a LSTech Weight sensor."""
@@ -142,6 +160,8 @@ class LSTechWeightSensor(SensorEntity, RestoreEntity):
     _attr_icon = "mdi:weight"
     _attr_native_unit_of_measurement = "kg"
     _attr_should_poll = False
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    
     
     def __init__(self, coordinator, entry, api):
         """Initialize the sensor."""
@@ -183,7 +203,7 @@ class LSTechWeightSensor(SensorEntity, RestoreEntity):
                 if "iso_timestamp" in self.coordinator.data:
                     attributes["timestamp"] = self.coordinator.data["iso_timestamp"]
                 if "rawDataId" in self.coordinator.data:
-                    attributes["raw_data_id"] = self.coordinator.data["rawDataId"]
+                    attributes["raw_data_id"] = str(self.coordinator.data["rawDataId"])
                     rawDataId = self.coordinator.data["rawDataId"]
                 
         if self.api.error_state:
@@ -195,7 +215,7 @@ class LSTechWeightSensor(SensorEntity, RestoreEntity):
                 
         if is_updated:
             self.async_write_ha_state()
-        self.hass.async_create_task(update_step2(self.hass, self.entry, self.api, rawDataId))
+        self.hass.async_create_task(update_detail(self.hass, self.entry, self.api, rawDataId))
         
     @property
     def available(self):
@@ -236,17 +256,26 @@ class LSTechDetailSensor(SensorEntity):
     _attr_icon = "mdi:account-details"
     _attr_native_unit_of_measurement = "kg"
     _attr_should_poll = False
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.WEIGHT
     
-    def __init__(self, coordinator, entry, api, coordinator_data):
+    def __init__(self, coordinator, entry, api, coordinator_data, member=None):
         self.coordinator = coordinator
         self.coordinator_data = coordinator_data
         self.entry = entry
         self.api = api
+        self.member_id = member.get("memberId") if member else entry.data.get("member_id")
+        self.nickname = member.get("nickname") if member else entry.data.get(CONF_NICKNAME)
         self._attr_has_entity_name = True
         #self._attr_name = "detail"
         self._attr_translation_key = "detail"
-        self.entity_id = f'{ENTITY_DOMAIN}.{DOMAIN}_{entry.data["uid"]}_detail'
-        self._attr_unique_id = f"{entry.entry_id}_detail"
+        self._attr_translation_placeholders = {CONF_NICKNAME: self.nickname}
+        if self.member_id == entry.data.get("member_id"):
+            self.entity_id = f'{ENTITY_DOMAIN}.{DOMAIN}_{entry.data["uid"]}_detail'
+            self._attr_unique_id = f"{entry.entry_id}_detail"
+        else:
+            self.entity_id = f'{ENTITY_DOMAIN}.{DOMAIN}_{entry.data["uid"]}_detail_{self.member_id}'
+            self._attr_unique_id = f"{entry.entry_id}_detail_{self.member_id}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": None,
@@ -255,6 +284,9 @@ class LSTechDetailSensor(SensorEntity):
             "manufacturer": "LSTech",
             "model": "Smart Scale"
         }
+    
+    def own_data(self, rawDataId, MemberId=None):
+        return self.api.own_data(rawDataId, self.member_id if MemberId is None else MemberId)
     
     @property
     def state(self):
@@ -288,7 +320,8 @@ class LSTechDetailSensor(SensorEntity):
     
     async def async_will_remove_from_hass(self):
         await super().async_will_remove_from_hass()
-        MyEntries[self.entry.entry_id].pop(self.entity_id)
+        if self.entry.entry_id in MyEntries and self.entity_id in MyEntries[self.entry.entry_id]:
+            MyEntries[self.entry.entry_id].pop(self.entity_id)
     
     async def async_update(self):
         await self.coordinator.async_request_refresh()
