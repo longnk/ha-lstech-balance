@@ -36,15 +36,20 @@ blueprint:
       default:
         - if:
             - condition: template
+              alias: 数据认领成功
               value_template: "{{ response.code == \"0\" }}"
           then:
+            - alias: 等待实体刷新
+              wait_template: "{{ as_timestamp(now()) - as_timestamp(states[member_entity].last_updated) < 2 }}"
+              continue_on_timeout: true
+              timeout: "2"
             - action: notify.persistent_notification
               metadata: {}
               data:
                 title: 派健康体脂秤
                 message: |
-                  为 {{ state_attr(member_entity, 'nickname') }} 认领数据ID为 {{ raw_data_id }} 的数据成功!
-                  当前体重描为: {{ state_attr(member_entity, 'weight') }}kg {{ state_attr(member_entity, 'weightDescription') }}
+                  为 {{ state_attr(member_entity, 'nickname') }} 认领ID为 {{ raw_data_id }} 的数据成功!
+                  当前体重为: {{ state_attr(member_entity, 'weight') }}kg {{ state_attr(member_entity, 'weightDescription') }}
                   bmi为: {{ state_attr(member_entity, 'bmi') }} {{ state_attr(member_entity, 'bmiDescription') }}
           else:
             - action: notify.persistent_notification
@@ -82,9 +87,11 @@ triggers:
   - platform: state
     entity_id: !input weight
     attribute: timestamp
+    alias: 未认领数据有更新
     id: weight_update
   - trigger: event
     event_type: lstech_balance_test
+    alias: 调试事件
     id: debug_event
 
 condition:
