@@ -216,8 +216,8 @@ class LSTechWeightSensor(SensorEntity, RestoreEntity):
                 
         if is_updated:
             self.async_write_ha_state()
-        if not hasattr(self,'__update_detail') or self.entry.options.get(CONF_AUTO_OWN_DATA, False) or self.entry.options.get(CONF_AUTO_UPDATE_DETAIL, False):
-            self.__update_detail = True
+        if not hasattr(self,'_update_detail') or self.entry.options.get(CONF_AUTO_OWN_DATA, False) or self.entry.options.get(CONF_AUTO_UPDATE_DETAIL, False):
+            self._update_detail = True
             self.hass.async_create_task(update_detail(self.hass, self.entry, self.api, rawDataId))
         
     @property
